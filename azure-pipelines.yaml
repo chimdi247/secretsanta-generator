@@ -77,7 +77,7 @@ stages:
       - agent.name -equals agent-1
     steps:
     - script: mvn package
-      displayName: 'package the app'
+      displayName: 'build package step'
 
 # ------------------- DOCKER -------------------
 - stage: Docker

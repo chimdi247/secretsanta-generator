@@ -76,8 +76,8 @@ stages:
       demands:
       - agent.name -equals agent-1
     steps:
-    - script: mvn -X test
-      displayName: 'Run Tests with Full Debug'
+    - script: mvn package
+      displayName: 'package the app'
 
 # ------------------- DOCKER -------------------
 - stage: Docker

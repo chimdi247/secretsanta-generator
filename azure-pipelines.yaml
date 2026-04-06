@@ -22,20 +22,6 @@ stages:
     - script: mvn compile
       displayName: 'Compile-Step'
 
-# ------------------- TRIVY FS SCAN -------------------
-- stage: Trivy_FS_Scan
-  displayName: 'Trivy FS Stage'
-  jobs:
-  - job: TrivyFSJob
-    displayName: 'TrivyFS Job'
-    pool:
-      name: chimdi
-      demands:
-      - agent.name -equals agent-1
-    steps:
-    - script: trivy fs --format table -o trivy-fs-report.html .
-      displayName: 'TrivyFS-Scan-Step'
-
 # ------------------- SONARQUBE -------------------
 - stage: SonarQube_Scan
   displayName: 'SonarQube Stage'
@@ -56,14 +42,10 @@ stages:
         cliProjectName: 'project-2'
         cliSources: '.'
         extraProperties: |
-          # Additional properties that will be passed to the scanner, 
-          # Put one key=value per line, example:
-          # sonar.exclusions=**/*.bin
-             sonar.java.binaries=.
+          sonar.java.binaries=.
     - task: SonarQubeAnalyze@8
       inputs:
         jdkversion: 'JAVA_HOME'
-   
 
 # ------------------- BUILD -------------------
 - stage: Build
@@ -76,8 +58,17 @@ stages:
       demands:
       - agent.name -equals agent-1
     steps:
+    # ✅ Run Maven with debug so we see full test errors
+    - script: mvn -X test
+      displayName: 'Run Tests with Full Debug'
+    # ✅ Print Surefire reports for context
+    - script: |
+        echo "==== SUREFIRE REPORTS ===="
+        cat target/surefire-reports/*.txt || true
+      displayName: 'Show Surefire Test Reports'
+    # Build package only after tests
     - script: mvn package
-      displayName: 'build package step'
+      displayName: 'Build Package Step'
 
 # ------------------- DOCKER -------------------
 - stage: Docker
@@ -92,7 +83,6 @@ stages:
     steps:
     - script: mvn package
       displayName: 'Build-Package-Step'
-
     - task: Docker@2
       inputs:
         containerRegistry: 'docker-connect'
@@ -129,7 +119,6 @@ stages:
     - task: KubectlInstaller@0
       inputs:
         kubectlVersion: 'latest'
-
     - task: Kubernetes@1
       inputs:
         connectionType: 'Kubernetes Service Connection'

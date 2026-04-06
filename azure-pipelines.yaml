@@ -1,0 +1,144 @@
+trigger:
+- none
+
+pool:
+  name: chimdi
+  demands:
+  - agent.name -equals agent-1
+
+stages:
+
+# ------------------- COMPILE -------------------
+- stage: Compile
+  displayName: 'Compile Stage'
+  jobs:
+  - job: CompileJob
+    displayName: 'Compile Job'
+    pool:
+      name: chimdi
+      demands:
+      - agent.name -equals agent-1
+    steps:
+    - script: mvn compile
+      displayName: 'Compile-Step'
+
+# ------------------- TRIVY FS SCAN -------------------
+- stage: Trivy_FS_Scan
+  displayName: 'Trivy FS Stage'
+  jobs:
+  - job: TrivyFSJob
+    displayName: 'TrivyFS Job'
+    pool:
+      name: chimdi
+      demands:
+      - agent.name -equals agent-1
+    steps:
+    - script: trivy fs --format table -o trivy-fs-report.html .
+      displayName: 'TrivyFS-Scan-Step'
+
+# ------------------- SONARQUBE -------------------
+- stage: SonarQube_Scan
+  displayName: 'SonarQube Stage'
+  jobs:
+  - job: SonarQubeJob
+    displayName: 'SonarQube Job'
+    pool:
+      name: chimdi
+      demands:
+      - agent.name -equals agent-1
+    steps:
+    - task: SonarQubePrepare@8
+      inputs:
+        SonarQube: 'sonar-connect'
+        scannerMode: 'cli'
+        configMode: 'manual'
+        cliProjectKey: 'project-2'
+        cliProjectName: 'project-2'
+        cliSources: '.'
+        extraProperties: |
+          # Additional properties that will be passed to the scanner, 
+          # Put one key=value per line, example:
+          # sonar.exclusions=**/*.bin
+             sonar.java.binaries=.
+    - task: SonarQubeAnalyze@8
+      inputs:
+        jdkversion: 'JAVA_HOME'
+   
+
+# ------------------- BUILD -------------------
+- stage: Build
+  displayName: 'Build Stage'
+  jobs:
+  - job: BuildJob
+    displayName: 'Build Job'
+    pool:
+      name: chimdi
+      demands:
+      - agent.name -equals agent-1
+    steps:
+    - script: mvn -X test
+      displayName: 'Run Tests with Full Debug'
+
+# ------------------- DOCKER -------------------
+- stage: Docker
+  displayName: 'Docker Stage'
+  jobs:
+  - job: DockerJob
+    displayName: 'Docker Job'
+    pool:
+      name: chimdi
+      demands:
+      - agent.name -equals agent-1
+    steps:
+    - script: mvn package
+      displayName: 'Build-Package-Step'
+
+    - task: Docker@2
+      inputs:
+        containerRegistry: 'docker-connect'
+        repository: 'chimdi247/santa'
+        command: 'buildAndPush'
+        Dockerfile: '**/Dockerfile'
+        tags: 'latest'
+
+# ------------------- TRIVY IMAGE SCAN -------------------
+- stage: Trivy_Image_Scan
+  displayName: 'Trivy Image Stage'
+  jobs:
+  - job: TrivyImageJob
+    displayName: 'Trivy Image Job'
+    pool:
+      name: chimdi
+      demands:
+      - agent.name -equals agent-1
+    steps:
+    - script: trivy image --format table -o trivy-image-report.html chimdi247/santa:latest
+      displayName: 'Trivy-Image-Scan-Step'
+
+# ------------------- K8 DEPLOY -------------------
+- stage: K8_Deploy
+  displayName: 'K8 Deploy Stage'
+  jobs:
+  - job: K8_DeployJob
+    displayName: 'K8 Deploy Job'
+    pool:
+      name: chimdi
+      demands:
+      - agent.name -equals agent-1
+    steps:
+    - task: KubectlInstaller@0
+      inputs:
+        kubectlVersion: 'latest'
+
+    - task: Kubernetes@1
+      inputs:
+        connectionType: 'Kubernetes Service Connection'
+        kubernetesServiceEndpoint: 'k8s-connecting'
+        namespace: 'santa'
+        command: 'apply'
+        useConfigurationFile: true
+        configuration: 'k8-dep-svc.yml'
+        secretType: 'dockerRegistry'
+        containerRegistryType: 'Container Registry'
+        dockerRegistryEndpoint: 'docker-connect'
+        forceUpdate: false
